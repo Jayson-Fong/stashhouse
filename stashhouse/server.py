@@ -32,10 +32,12 @@ class ServerOptions(NamedTuple):
 
     Attributes:
         host: Address plugins should bind to.
+        log_level: Minimum log level to log.
         directory: Path to store files.
     """
 
     host: str = "127.0.0.1"
+    log_level: int = logging.INFO
     directory: pathlib.Path = pathlib.Path("data")
 
 
@@ -105,8 +107,10 @@ class Server:
             return
 
         logger.info("Loading plugin: %s", plugin_entry.name)
+        # fmt: off
         plugin_process: multiprocessing.Process = plugin.run_server_plugin(
-            plugin_entry, self.options, exited=self.exited, **plugin_options
+            plugin_entry, self.options, exited=self.exited,
+            log_level=self.options.log_level, **plugin_options
         )
         plugin_process.start()
         self._processes.append(plugin_process)
@@ -126,6 +130,7 @@ class Server:
             for plugin_entry in plugin.find_server_plugins():
                 self._load_plugin(plugin_entry)
         except:
+            logger.exception("Failed to load one or more plugins. Shutting down.")
             self.stop()
             raise
 

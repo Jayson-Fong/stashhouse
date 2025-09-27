@@ -5,6 +5,7 @@ Accepts arguments from the command-line and start the server.
 """
 
 import argparse
+import logging
 import pathlib
 from typing import TYPE_CHECKING, Sequence
 
@@ -13,6 +14,30 @@ from . import server, plugin
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from importlib.metadata import EntryPoint
+
+
+LOG_LEVELS: dict[str, int] = {
+    "critical": logging.CRITICAL,
+    "error": logging.ERROR,
+    "warning": logging.WARNING,
+    "info": logging.INFO,
+    "debug": logging.DEBUG,
+    "all": logging.NOTSET,
+}
+
+
+def _log_level(log_level_name: str) -> int:  # noqa
+    """
+    Converts a log level name to its associated integer level
+
+    Args:
+        log_level_name: Log level name
+
+    Returns:
+        Log level integer associated with the name
+    """
+
+    return LOG_LEVELS.get(log_level_name.lower(), logging.INFO)
 
 
 def _parser(**kwargs) -> argparse.ArgumentParser:
@@ -30,16 +55,16 @@ def _parser(**kwargs) -> argparse.ArgumentParser:
     """
 
     parser = argparse.ArgumentParser(**kwargs)
-    parser.add_argument(
-        "--host", "-H", default="127.0.0.1", help="Address to listen on"
-    )
-    parser.add_argument(
-        "--directory",
-        "-d",
-        default="data",
-        type=pathlib.Path,
-        help="Directory to store data in",
-    )
+    # fmt: off
+    parser.add_argument("--host", "-H",
+                        default="127.0.0.1", help="Address to listen on")
+    # fmt: off
+    parser.add_argument("--directory", "-d", default="data",
+                        type=pathlib.Path, help="Directory to store data in",)
+    # fmt: off
+    parser.add_argument("--log-level",
+                        choices=LOG_LEVELS.keys(), default="info",
+                        help="Log level to print to console")
 
     register_plugin: "EntryPoint"
     for register_plugin in plugin.find_cli_register_plugins():
@@ -71,8 +96,11 @@ def _parse_arguments(
 
     # Extract our server options
     server_options: server.ServerOptions = server.ServerOptions(
-        host=args.host, directory=args.directory
+        host=args.host, directory=args.directory, log_level=_log_level(args.log_level)
     )
+
+    # Configure logging
+    logging.basicConfig(level=server_options.log_level)
 
     plugin_options: dict[str, plugin.PluginOptions] = {}
     parser_plugin: "EntryPoint"

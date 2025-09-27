@@ -3,6 +3,7 @@ Plugin execution utilities.
 """
 
 import argparse
+import logging
 import multiprocessing
 from importlib.metadata import entry_points
 from typing import (
@@ -70,6 +71,8 @@ class Plugin(Protocol):
 PluginArgumentRegistrar = Callable[[str, argparse.ArgumentParser], None]
 PluginArgumentParser = Callable[[str, argparse.Namespace], PluginOptions]
 
+logger = logging.getLogger(__name__)
+
 
 def find_server_plugins() -> Generator["EntryPoint", None, None]:
     """
@@ -113,7 +116,9 @@ def find_cli_parse_plugins() -> "EntryPoints":
     return entry_points(group="stashhouse.plugins.cli.parse")
 
 
-def _run_server_plugin(plugin: "EntryPoint", *args, **kwargs) -> None:
+def _run_server_plugin(
+    plugin: "EntryPoint", *args, log_level: int = logging.INFO, **kwargs
+) -> None:
     """
     Executes a plugin.
 
@@ -123,15 +128,20 @@ def _run_server_plugin(plugin: "EntryPoint", *args, **kwargs) -> None:
     Args:
         plugin: Entry point pointing to a Plugin.
         *args: Arguments to pass to the Plugin initializer.
+        log_level: Minimum level to log.
         **kwargs: Keyword arguments to pass to the Plugin initializer.
     """
 
+    logging.basicConfig(level=log_level)
     plugin_instance: Plugin = plugin.load()(*args, **kwargs)
 
     try:
         plugin_instance.run()
     except KeyboardInterrupt:
         kwargs["exited"].set()
+    except:
+        logger.exception("Shutting down plugin due to exception: %s", plugin.name)
+        raise
 
 
 def run_server_plugin(*args, **kwargs) -> multiprocessing.Process:
