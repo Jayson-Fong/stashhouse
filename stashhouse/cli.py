@@ -66,6 +66,13 @@ def _parser(**kwargs) -> argparse.ArgumentParser:
                         choices=LOG_LEVELS.keys(), default="info",
                         help="Log level to print to console")
 
+    # Plugin Loading
+    plugin_names: list[str] = [entry.name for entry in plugin.find_server_plugins()]
+    # fmt: off
+    parser.add_argument("--enable-plugin", "--enable", "-e", nargs="+",
+                        choices=plugin_names, action="extend", default=[], dest="plugins",
+                        help="Plugin names to enable")
+
     register_plugin: "EntryPoint"
     for register_plugin in plugin.find_cli_register_plugins():
         registrar: plugin.PluginArgumentRegistrar = register_plugin.load()
@@ -96,7 +103,10 @@ def _parse_arguments(
 
     # Extract our server options
     server_options: server.ServerOptions = server.ServerOptions(
-        host=args.host, directory=args.directory, log_level=_log_level(args.log_level)
+        host=args.host,
+        directory=args.directory,
+        log_level=_log_level(args.log_level),
+        plugins=args.plugins,
     )
 
     # Configure logging

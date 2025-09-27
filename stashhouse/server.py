@@ -32,11 +32,13 @@ class ServerOptions(NamedTuple):
 
     Attributes:
         host: Address plugins should bind to.
+        plugins: List of plugins to load.
         log_level: Minimum log level to log.
         directory: Path to store files.
     """
 
     host: str = "127.0.0.1"
+    plugins: list[str] = []
     log_level: int = logging.INFO
     directory: pathlib.Path = pathlib.Path("data")
 
@@ -128,6 +130,9 @@ class Server:
 
         try:
             for plugin_entry in plugin.find_server_plugins():
+                if plugin_entry.name not in self.options.plugins:
+                    continue
+
                 self._load_plugin(plugin_entry)
         except:
             logger.exception("Failed to load one or more plugins. Shutting down.")
