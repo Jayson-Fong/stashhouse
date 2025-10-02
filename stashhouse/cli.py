@@ -13,8 +13,7 @@ from . import server, plugin
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
-    from importlib.metadata import EntryPoint
-
+    from importlib.metadata import EntryPoint, EntryPoints
 
 LOG_LEVELS: dict[str, int] = {
     "critical": logging.CRITICAL,
@@ -40,7 +39,37 @@ def _log_level(log_level_name: str) -> int:  # noqa
     return LOG_LEVELS.get(log_level_name.lower(), logging.INFO)
 
 
-def _parser(**kwargs) -> argparse.ArgumentParser:
+def _parse_requested_plugins(args: Sequence[str] | None = None) -> Sequence[str]:
+    """
+    Parses the requested plugins to enable.
+
+    Serves to restrict memory usage by preventing
+    the loading of unnecessary plugins entirely.
+
+    Args:
+        args: Sequence of arguments to evaluate.
+
+    Returns:
+        A sequence of plugin names to enable.
+    """
+
+    load_parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        exit_on_error=False, add_help=False
+    )
+
+    # fmt: off
+    load_parser.add_argument(
+        "--enable-plugin", "--enable", "-e",
+        nargs="*", action="extend", dest="plugins", default=[])
+
+    return tuple(load_parser.parse_known_args(args)[0].plugins)
+
+
+def _parser(
+    plugin_definitions: "EntryPoints",
+    desired_plugins: Sequence[str] | None = None,
+    **kwargs,
+) -> argparse.ArgumentParser:
     """
     Creates an argument parser.
 
@@ -48,6 +77,8 @@ def _parser(**kwargs) -> argparse.ArgumentParser:
     may include additional options derived from installed plugins.
 
     Args:
+        plugin_definitions: Plugin definitions to register arguments for.
+        desired_plugins: Sequence of desired plugin names.
         **kwargs: Keyword arguments to pass for parser initialization.
 
     Returns:
@@ -67,27 +98,39 @@ def _parser(**kwargs) -> argparse.ArgumentParser:
                         help="Log level to print to console")
 
     # Plugin Loading
-    plugin_names: list[str] = [entry.name for entry in plugin.find_server_plugins()]
+    plugin_names: list[str] = [
+        entry.name
+        for entry in plugin_definitions
+        if not desired_plugins or entry.name in desired_plugins
+    ]
+
     # fmt: off
     parser.add_argument("--enable-plugin", "--enable", "-e", nargs="+",
                         choices=plugin_names, action="extend", default=[], dest="plugins",
                         help="Plugin names to enable")
 
-    register_plugin: "EntryPoint"
-    for register_plugin in plugin.find_cli_register_plugins():
-        registrar: plugin.PluginArgumentRegistrar = register_plugin.load()
-        registrar(register_plugin.name, parser)
+    plugin_entry: "EntryPoint"
+    for plugin_entry in plugin_definitions:
+        if desired_plugins and plugin_entry.name not in desired_plugins:
+            continue
+
+        registrar: plugin.Plugin = plugin_entry.load()
+        registrar.register_arguments(plugin_entry.name, parser)
 
     return parser
 
 
 def _parse_arguments(
-    args: Sequence[str] | None = None, namespace: argparse.Namespace = None, **kwargs
+    plugin_definitions: "EntryPoints",
+    args: Sequence[str] | None = None,
+    namespace: argparse.Namespace = None,
+    **kwargs,
 ) -> tuple[server.ServerOptions, dict[str, plugin.PluginOptions]]:
     """
     Parse arguments while leveraging installed plugins.
 
     Args:
+        plugin_definitions: Plugin definitions to handle arguments for.
         args: Sequence of arguments to parse.
         namespace: Namespace of options.
         **kwargs: Keyword arguments to pass for parser initialization.
@@ -98,7 +141,10 @@ def _parse_arguments(
         representing plugin names and dictionary (str -> Any) values.
     """
 
-    parser: argparse.ArgumentParser = _parser(**kwargs)
+    desired_plugins: Sequence[str] = _parse_requested_plugins(args)
+    parser: argparse.ArgumentParser = _parser(
+        plugin_definitions, desired_plugins, **kwargs
+    )
     args: argparse.Namespace = parser.parse_args(args, namespace)
 
     # Extract our server options
@@ -113,27 +159,40 @@ def _parse_arguments(
     logging.basicConfig(level=server_options.log_level)
 
     plugin_options: dict[str, plugin.PluginOptions] = {}
-    parser_plugin: "EntryPoint"
-    for parser_plugin in plugin.find_cli_parse_plugins():
-        parser: plugin.PluginArgumentParser = parser_plugin.load()
-        plugin_options[parser_plugin.name] = parser(parser_plugin.name, args)
+    plugin_entry: "EntryPoint"
+    for plugin_entry in plugin_definitions:
+        if desired_plugins and plugin_entry.name not in desired_plugins:
+            continue
+
+        parser: plugin.Plugin = plugin_entry.load()
+        plugin_options[plugin_entry.name] = parser.derive_options(
+            plugin_entry.name, args
+        )
 
     return server_options, plugin_options
 
 
 def main(
-    args: Sequence[str] | None = None, namespace: argparse.Namespace = None, **kwargs
+    plugin_definitions: "EntryPoints | None" = None,
+    args: Sequence[str] | None = None,
+    namespace: argparse.Namespace = None,
+    **kwargs,
 ) -> None:
     """
     Parse arguments and start the server accordingly.
 
     Args:
+        plugin_definitions: Plugin definitions to handle arguments for.
         args: Sequence of arguments to parse.
         namespace: Namespace of options.
         **kwargs: Keyword arguments to pass for parser initialization.
     """
+    if plugin_definitions is None:
+        plugin_definitions: "EntryPoints" = plugin.find_plugins()
 
-    options, plugin_options = _parse_arguments(args, namespace, **kwargs)
+    options, plugin_options = _parse_arguments(
+        plugin_definitions, args, namespace, **kwargs
+    )
     with server.Server(options, **plugin_options) as stashhouse:
         try:
             stashhouse.join()

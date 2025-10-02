@@ -10,11 +10,8 @@ from typing import (
     Protocol,
     runtime_checkable,
     TypedDict,
-    NotRequired,
     Unpack,
     TYPE_CHECKING,
-    Generator,
-    Callable,
 )
 
 if TYPE_CHECKING:
@@ -28,16 +25,12 @@ class PluginOptions(TypedDict, total=False):
     """
     Plugin options.
 
-    A plugin may optionally offer the "enable" option
-    to designate whether a plugin should be enabled or not.
-    If a plugin offers it, it must be a boolean. Plugins
-    may offer additional plugin options.
+    This is provided for future expansion, though
+    there currently does not exist any mandates
+    on the plugin option definitions.
     """
 
-    enable: NotRequired[bool]
 
-
-# pylint: disable=too-few-public-methods
 @runtime_checkable
 class Plugin(Protocol):
     """
@@ -67,53 +60,46 @@ class Plugin(Protocol):
         Start the plugin.
         """
 
+    @classmethod
+    def register_arguments(
+        cls, plugin_name: str, parser: argparse.ArgumentParser
+    ) -> None:
+        """
+        Adds arguments to a parser for a plugin.
 
-PluginArgumentRegistrar = Callable[[str, argparse.ArgumentParser], None]
-PluginArgumentParser = Callable[[str, argparse.Namespace], PluginOptions]
+        Args:
+            plugin_name: The plugin name.
+            parser: An argument parser.
+        """
+
+    @classmethod
+    def derive_options(
+        cls, plugin_name: str, args: argparse.Namespace
+    ) -> PluginOptions:
+        """
+        Given a namespace, extracts the plugin's options.
+
+        Args:
+            plugin_name: The plugin name.
+            args: An argument parser.
+
+        Returns:
+            A dictionary of values for the plugin.
+        """
+
 
 logger = logging.getLogger(__name__)
 
 
-def find_server_plugins() -> Generator["EntryPoint", None, None]:
+def find_plugins() -> "EntryPoints":
     """
-    Identifies server plugin entry points.
+    Identifies plugin definitions based on entry points.
 
-    Yields:
-        An entry point pointing to instances of Plugin.
-    """
-
-    yield from entry_points(group="stashhouse.plugins.server")
-
-
-def find_cli_register_plugins() -> "EntryPoints":
-    """
-    Identifies CLI register plugins.
-
-    A PluginArgumentRegistrar represents a callable that accepts
-    a string plugin name and an argument parser with the
-    expectation that it will register arguments as required to
-    the provided argument parser.
-
-    Yields:
-        An entry point pointing to a PluginArgumentRegistrar.
+    Returns:
+        Entry points of plugins.
     """
 
-    return entry_points(group="stashhouse.plugins.cli.register")
-
-
-def find_cli_parse_plugins() -> "EntryPoints":
-    """
-    Identifies CLI parser plugins.
-
-    A PluginArgumentParser represents a callable that accepts
-    a string plugin name and an argparse.Namespace with
-    the expectation that it will return a dictionary of
-    plugin options extracted from the namespace.
-
-    Yields:
-        An entry point pointing to a PluginArgumentParser.
-    """
-    return entry_points(group="stashhouse.plugins.cli.parse")
+    return entry_points(group="stashhouse.plugin")
 
 
 def _run_server_plugin(
@@ -159,4 +145,4 @@ def run_server_plugin(*args, **kwargs) -> multiprocessing.Process:
     return multiprocessing.Process(target=_run_server_plugin, args=args, kwargs=kwargs)
 
 
-__all__ = ("PluginOptions", "Plugin", "find_server_plugins", "run_server_plugin")
+__all__ = ("PluginOptions", "Plugin", "find_plugins", "run_server_plugin")

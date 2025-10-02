@@ -17,7 +17,7 @@ from . import plugin
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
-    from importlib.metadata import EntryPoint
+    from importlib.metadata import EntryPoint, EntryPoints
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +65,22 @@ class Server:
         plugin_options: Options to apply at the plugin level.
         _plugins: An exit stack to clean up the server.
         _processes: List of all processes launched.
+        _plugin_definitions: Plugin definitions to evaluate.
     """
 
-    def __init__(self, options: ServerOptions | None = None, **plugin_options):
+    def __init__(
+        self,
+        options: ServerOptions | None = None,
+        plugins: "EntryPoints | None" = None,
+        **plugin_options,
+    ):
         """
         Initializes the server.
 
         Args:
-        options: Server options to apply globally.
-        plugin_options: Options to apply at the plugin level.
+            options: Server options to apply globally.
+            plugins: Plugin definitions to evaluate.
+            plugin_options: Options to apply at the plugin level.
         """
 
         self.options = options
@@ -84,6 +91,22 @@ class Server:
         self.plugin_options = plugin_options
         self._plugins: contextlib.ExitStack = contextlib.ExitStack()
         self._processes: list[multiprocessing.Process] = []
+
+        self._plugin_definitions = plugins
+        if self._plugin_definitions is None:
+            self._plugin_definitions = self._find_plugin_definitions()
+
+    def _find_plugin_definitions(self) -> "EntryPoints":
+        """
+        Identifies plugin definitions.
+
+        Only called if plugin definitions are not provided initially.
+
+        Returns:
+            Plugin definitions to evaluate.
+        """
+
+        return plugin.find_plugins()
 
     def _load_plugin(self, plugin_entry: "EntryPoint") -> None:
         """
@@ -122,14 +145,13 @@ class Server:
         """
         Start the server and all enabled plugins.
 
-        Identifies all plugins through finding all entry
-        points in the group "stashhouse.plugins.server".
-        It is expected that the value maps to a class
-        conforming to the plugin.Plugin protocol.
+        Loops through the plugin definitions and attempts
+        to load them, if enabled. If an error occurs during
+        this process, the full server will halt.
         """
 
         try:
-            for plugin_entry in plugin.find_server_plugins():
+            for plugin_entry in self._plugin_definitions:
                 if plugin_entry.name not in self.options.plugins:
                     continue
 
