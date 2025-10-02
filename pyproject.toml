@@ -28,7 +28,10 @@ classifiers = [
 
 [project.optional-dependencies]
 ssh = [
-    "stashhouse_ssh>=0.0.1"
+    "stashhouse-ssh>=0.0.5"
+]
+tftp = [
+    "stashhouse-tftp>=0.0.2"
 ]
 
 [project.urls]
