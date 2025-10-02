@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "stashhouse"
-version = "0.0.3"
+version = "0.0.4"
 requires-python = ">=3.11"
 authors = [
     {name = "Jayson Fong", email = "jayson.fong@gatech.edu"}
@@ -21,12 +21,17 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13"
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: File Sharing",
+    "Typing :: Typed"
 ]
 
 [project.optional-dependencies]
 ssh = [
-    "stashhouse_ssh>=0.0.1"
+    "stashhouse-ssh>=0.0.5"
+]
+tftp = [
+    "stashhouse-tftp>=0.0.2"
 ]
 
 [project.urls]
